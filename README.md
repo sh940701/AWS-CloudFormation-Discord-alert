@@ -33,10 +33,13 @@ CodePipeline 배포 관련 alert 를 Discord 로 전송할 수 있도록 하는 
 ## Deployment Confirmation Screenshots
 
 ### started
-![example-started](./static/example-started.png)
+
+<img src="./static/example-started.png" width=400>
 
 ### succeeded
-![example-succeeded](./static/example-succeeded.png)
+
+<img src="./static/example-succeeded.png" width=400>
 
 ### failed
-![example-failed](./static/example-failed.png)
+
+<img src="./static/example-failed.png" width=400>

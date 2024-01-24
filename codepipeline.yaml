@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Stack for Pipeline Notification
+
+Resources:
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore: ...
+      RoleArn: ...
+      Stages:
+        - Name: Stage1_name
+          Actions:
+            - ...
+        - Name: Stage2_name
+          Actions:
+            - ...
+        - Name: Stage3_name
+          Actions:
+            - ...
+
+Outputs:
+  Pipeline:
+    Value: !Ref CodePipeline
+    Export:
+      Name:
+        Fn::Join:
+          - '-'
+          - - !Ref AWS::StackName
+            - CodePipeline

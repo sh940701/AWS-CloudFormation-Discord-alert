@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Stack for Pipeline Notification
+
+Parameters:
+  NotificationName:
+    Type: String
+
+  CodePipelineAlertLambdaArn:
+    Type: String
+
+  CodePipeline:
+    Type: String
+
+Resources:
+  Notification:
+    Type: AWS::CodeStarNotifications::NotificationRule
+    Properties:
+      Name: !Ref NotificationName
+      Resource:
+        Fn::Join:
+          - ':'
+          - - arn
+            - !Ref AWS::Partition
+            - codepipeline
+            - !Ref AWS::Region
+            - !Ref AWS::AccountId
+            - !Ref CodePipeline
+      Targets:
+        - TargetType: SNS
+          TargetAddress: !Ref Topic
+      DetailType: FULL
+      EventTypeIds:
+        - codepipeline-pipeline-pipeline-execution-failed
+        - codepipeline-pipeline-pipeline-execution-canceled
+        - codepipeline-pipeline-pipeline-execution-started
+        - codepipeline-pipeline-pipeline-execution-resumed
+        - codepipeline-pipeline-pipeline-execution-succeeded
+        - codepipeline-pipeline-pipeline-execution-superseded
+        - codepipeline-pipeline-manual-approval-needed
+
+  # topic -> lambda
+  # https://repost.aws/questions/QURfs4EsYyROihznG3pfx-xA/cloudformation-connect-lambda-to-an-exisitng-sns-topic
+  Topic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref CodePipelineAlertLambdaArn
+          Protocol: lambda
+
+  TopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref Topic
+      PolicyDocument:
+        Statement:
+          - Action: SNS:Publish
+            Effect: Allow
+            Resource: !Ref Topic
+            Principal:
+              Service: codestar-notifications.amazonaws.com
+
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CodePipelineAlertLambdaArn
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref Topic

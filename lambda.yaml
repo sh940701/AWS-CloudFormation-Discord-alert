@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Stack for Pipeline Notification
+
+Parameters:
+
+  NotificationName:
+    Type: String
+
+  EnvironmentStage:
+    Type: String
+    Description: dev, prod, etc.
+    Default: dev
+
+  SecretsArn:
+    Type: String
+
+Resources:
+
+  CodePipelineAlertLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: CodePipelineAlertLambda
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - '-'
+          - - CodePipelineAlertLambda
+            - !Ref EnvironmentStage
+            - logs
+      RetentionInDays: 7
+
+  CodePipelineAlertLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: PipelineAlertLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  CodePipelineAlertLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Code:
+        ZipFile: |
+          exports.handler = async function (event) {
+          try {
+          const { time, detail } = JSON.parse(event.Records[0].Sns.Message);
+
+          const webHookURL = process.env.CODE_PIPELINE_WEBHOOK;
+          const envStage = process.env.ENVIRONMENT_STAGE;
+
+          if (!webHookURL || !envStage) {
+              throw new Error("Webhook URL or Environment Stage is missing");
+              }
+
+          const utcTime = new Date(time);
+          const koreaTime = new Date(utcTime.getTime() + (9 * 60 * 60 * 1000));
+          const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' };
+          const koreaTimeFormatted = new Intl.DateTimeFormat('ko-KR', options).format(koreaTime);
+
+          const content = `⛳️ **AWS CodePipeline Notification-${envStage}**\n\n**Execution Status: ${detail.state}**\n\n**Time:** ${koreaTimeFormatted}`;
+
+          const response = await fetch(webHookURL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ content })
+              });
+
+              if (!response.ok) {
+                throw new Error(`Webhook request failed with status: ${response.status}`);
+              }
+
+              return "Success";
+              } catch (e) {
+                console.error(e);
+                throw e;
+              }
+            };
+
+      Role: !GetAtt [ CodePipelineAlertLambdaRole, Arn ]
+      Environment:
+        Variables:
+          ENVIRONMENT_STAGE: !Ref EnvironmentStage
+          CODE_PIPELINE_WEBHOOK:
+            Fn::Sub:
+              - '{{resolve:secretsmanager:${SecretsArn}:SecretString:CODE_PIPELINE_WEBHOOK}}'
+              - SecretName: !Ref SecretsArn
+
+Outputs:
+  CodePipelineAlertLambdaArn:
+    Value: !GetAtt [ CodePipelineAlertLambda, Arn ]
+    Export:
+      Name:
+        Fn::Join:
+          - '-'
+          - - !Ref AWS::StackName
+            - CodePipelineAlertLambda
